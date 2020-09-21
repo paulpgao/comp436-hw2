@@ -28,7 +28,7 @@ parser.add_argument('--build-dir', help='Directory to build in.',
 parser.add_argument('--quiet', help='Suppress log messages.',
                     action='store_true', required=False, default=False)
 parser.add_argument('--manifest', help='Path to manifest file.',
-                    type=str, action='store', required=False, default='./topology/p4app.json')
+                    type=str, action='store', required=False, default='./p4app.json')
 parser.add_argument('app', help='.p4app package to run.', type=str)
 parser.add_argument('target', help=('Target to run. Defaults to the first target '
                                     'in the package.'),
@@ -48,13 +48,19 @@ def run_command(command):
     return os.WEXITSTATUS(os.system(command))
 
 class Manifest:
-    def __init__(self, language, target, target_config):
+    def __init__(self, program_file, language, target, target_config):
+        self.program_file = program_file
         self.language = language
         self.target = target
         self.target_config = target_config
 
 def read_manifest(manifest_file):
     manifest = json.load(manifest_file, object_pairs_hook=OrderedDict)
+
+    if 'program' not in manifest:
+        log_error('No program defined in manifest.')
+        sys.exit(1)
+    program_file = manifest['program']
 
     if 'language' not in manifest:
         log_error('No language defined in manifest.')
@@ -76,7 +82,7 @@ def read_manifest(manifest_file):
         log_error('Target not found in manifest:', chosen_target)
         sys.exit(1)
 
-    return Manifest(language, chosen_target, manifest['targets'][chosen_target])
+    return Manifest(program_file, language, chosen_target, manifest['targets'][chosen_target])
 
 
 def run_compile_bmv2(manifest):
@@ -105,37 +111,25 @@ def run_compile_bmv2(manifest):
             sys.exit(1)
         compiler_args.extend(flags)
 
-    if not 'configs' in manifest.target_config:
-        log_error('configs should be included in json')
-        sys.exit(1)
-    file_map = manifest.target_config['configs']
-    if not isinstance(file_map, OrderedDict):
-        log_error('configs should be a dictionary')
-        sys.exit(1)
+    # Compile the program.
+    output_file = manifest.program_file + '.json'
+    compiler_args.append('"%s"' % manifest.program_file)
+    compiler_args.append('-o "%s"' % output_file)
+    rv = run_command('p4c-bm2-ss %s' % ' '.join(compiler_args))
 
-    # Compile the programs.
-    outputs = []
-    for switch, p4file  in file_map.iteritems():
-        output_file = p4file + '.json'
-        outputs.append( (switch, output_file) )
-        args = list(compiler_args)
-        args.append('"%s"' % p4file)
-        args.append('-o "%s"' % output_file)
-        rv = run_command('p4c-bm2-ss %s' % ' '.join(args))
-
-        if 'run-after-compile' in manifest.target_config:
-            commands = manifest.target_config['run-after-compile']
-            if not isinstance(commands, list):
-                log_error('run-after-compile should be a list:', commands)
-                sys.exit(1)
-            for command in commands:
-                run_command(command)
-
-        if rv != 0:
-            log_error('Compile failed for: ' + output_file)
+    if 'run-after-compile' in manifest.target_config:
+        commands = manifest.target_config['run-after-compile']
+        if not isinstance(commands, list):
+            log_error('run-after-compile should be a list:', commands)
             sys.exit(1)
+        for command in commands:
+            run_command(command)
 
-    return outputs
+    if rv != 0:
+        log_error('Compile failed.')
+        sys.exit(1)
+
+    return output_file
 
 def run_mininet(manifest):
     output_file = run_compile_bmv2(manifest)
@@ -197,10 +191,8 @@ def run_mininet(manifest):
     return run_command('python2 %s %s' % (program, ' '.join(switch_args)))
 
 def run_multiswitch(manifest):
-    outputs = run_compile_bmv2(manifest)
-    switches, p4files = ([ a for a,b in outputs ], [ b for a,b in outputs ])
-    json_args = ' '.join(p4files)
-    switch_args = ' '.join(switches)
+    output_file = run_compile_bmv2(manifest)
+
     script_args = []
     cwd = os.getcwd()
     log_dir = os.path.join(cwd, cwd + '/logs')
@@ -213,8 +205,7 @@ def run_multiswitch(manifest):
     if 'auto-control-plane' in manifest.target_config and manifest.target_config['auto-control-plane']:
         script_args.append('--auto-control-plane' )
     script_args.append('--behavioral-exe "%s"' % 'simple_switch')
-    script_args.append('--json %s' % json_args)
-    script_args.append('--switches %s' % switch_args)
+    script_args.append('--json "%s"' % output_file)
     #script_args.append('--cli')
 
     # Generate a message that will be printed by the Mininet CLI to make
@@ -252,7 +243,7 @@ def run_multiswitch(manifest):
     return run_command('python2 %s %s' % (program, ' '.join(script_args)))
 
 def run_stf(manifest):
-    output_files = run_compile_bmv2(manifest)
+    output_file = run_compile_bmv2(manifest)
 
     if not 'test' in manifest.target_config:
         log_error('No STF test file provided.')

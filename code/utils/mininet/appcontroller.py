@@ -61,13 +61,12 @@ class AppController:
                 #entries[sw].append('table_add ipv4_lpm set_nhop %s/32 => %s %d' % (link['host_ip'], link['host_ip'], link['sw_port']))
                 iface = h.intfNames()[link['idx']]
                 # use mininet to set ip and mac to let it know the change
-                h.setIP(link['host_ip'], 16)
+                h.setIP(link['host_ip'], 24)
                 h.setMAC(link['host_mac'])
                 #h.cmd('ifconfig %s %s hw ether %s' % (iface, link['host_ip'], link['host_mac']))
                 h.cmd('arp -i %s -s %s %s' % (iface, link['sw_ip'], link['sw_mac']))
-                print 'arp -i %s -s %s %s' % (iface, link['sw_ip'], link['sw_mac'])
                 h.cmd('ethtool --offload %s rx off tx off' % iface)
-                h.cmd('ip route add %s dev %s' % (link['host_ip'], iface))
+                h.cmd('ip route add %s dev %s' % (link['sw_ip'], iface))
             h.setDefaultRoute("via %s" % link['sw_ip'])
 
         for h in self.net.hosts:
@@ -87,11 +86,8 @@ class AppController:
                 if not path: continue
                 h_link = self.topo._host_links[h.name][path[1]]
                 h2_link = self.topo._host_links[h2.name].values()[0]
-                iface = h.intfNames()[link['idx']]
-                h.cmd('ip route add %s via %s' % (h2_link['host_ip'], iface))
-                print 'ip route add %s via %s' % (h2_link['host_ip'], iface)                
-                h.cmd('arp -i %s -s %s %s' % (iface, h2_link['host_ip'], h2_link['host_mac']))
-                print 'arp -i %s -s %s %s' % (iface, h2_link['host_ip'], h2_link['host_mac'])
+                h.cmd('ip route add %s via %s' % (h2_link['host_ip'], h_link['sw_ip']))
+
 
         print "**********"
         print "Configuring entries in p4 tables"
@@ -99,7 +95,8 @@ class AppController:
             print
             print "Configuring switch... %s" % sw_name
             sw = self.net.get(sw_name)
-            self.add_entries(sw=sw, entries=entries[sw_name])
+            if entries[sw_name]:
+                self.add_entries(sw=sw, entries=entries[sw_name])
         print "Configuration complete."
         print "**********"
 

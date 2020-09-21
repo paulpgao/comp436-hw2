@@ -43,9 +43,7 @@ parser.add_argument('--thrift-port', help='Thrift server port for table updates'
 parser.add_argument('--bmv2-log', help='verbose messages in log file', action="store_true")
 parser.add_argument('--cli', help="start the mininet cli", action="store_true")
 parser.add_argument('--auto-control-plane', help='enable automatic control plane population', action="store_true")
-parser.add_argument('--json', nargs='+', help='Path to JSON config file',
-                    type=str, action="store", required=True)
-parser.add_argument('--switches', nargs='+', help='Switch names corresponding to JSON files',
+parser.add_argument('--json', help='Path to JSON config file',
                     type=str, action="store", required=True)
 parser.add_argument('--pcap-dump', help='Dump packets on interfaces to pcap files',
                     action="store_true")
@@ -62,8 +60,20 @@ parser.add_argument('--cli-message', help='Message to print before starting CLI'
 args = parser.parse_args()
 
 
+next_thrift_port = args.thrift_port
+
 def run_command(command):
     return os.WEXITSTATUS(os.system(command))
+
+def configureP4Switch(**switch_args):
+    class ConfiguredP4Switch(P4Switch):
+        def __init__(self, *opts, **kwargs):
+            global next_thrift_port
+            kwargs.update(switch_args)
+            kwargs['thrift_port'] = next_thrift_port
+            next_thrift_port += 1
+            P4Switch.__init__(self, *opts, **kwargs)
+    return ConfiguredP4Switch
 
 
 def main():
@@ -100,14 +110,10 @@ def main():
         os.mkdir(args.log_dir)
     os.environ['P4APP_LOGDIR'] = args.log_dir
 
-    print "#sssssssssssssssssss"
+
     links = [l[:2] for l in conf['links']]
-    print links
-    latencies = dict([(''.join(sorted(l[:2])), l[2]) for l in conf['links'] if len(l)==3])
-    bandwd = dict([(''.join(sorted(l[:2])), l[3]) for l in conf['links'] if len(l)==4])
-    print "#################"
-    print latencies
-    print bandwd
+    latencies = dict([(''.join(sorted(l[:2])), l[2]) for l in conf['links'] if len(l)>=3])
+    bws = dict([(''.join(sorted(l[:2])), l[3]) for l in conf['links'] if len(l)>=4])
 
     for host_name in sorted(conf['hosts'].keys()):
         host = conf['hosts'][host_name]
@@ -117,28 +123,26 @@ def main():
             other = a if a != host_name else b
             latencies[host_name+other] = host['latency']
 
-    # for l in latencies:
-    #     if isinstance(latencies[l], (str, unicode)):
-    #         latencies[l] = formatParams(latencies[l])
-    #     else:
-    #         latencies[l] = str(latencies[l]) + "ms"
-    
-
-    for b in bandwd:
-        bandwd[b] = float(bandwd[b])
-        # if isinstance(bandwd[b], (str, unicode)):
-        #     bandwd[b] = formatParams(bandwd[b])
-        # else:
-        #     bandwd[b] = float(bandwd[b])
+    for l in latencies:
+        if isinstance(latencies[l], (str, unicode)):
+            latencies[l] = formatParams(latencies[l])
+        else:
+            latencies[l] = str(latencies[l]) + "ms"
 
     bmv2_log = args.bmv2_log or ('bmv2_log' in conf and conf['bmv2_log'])
     pcap_dump = args.pcap_dump or ('pcap_dump' in conf and conf['pcap_dump'])
 
-    switch_info = dict(zip(args.switches, args.json))
-    topo = AppTopo(links, switch_info, args, bmv2_log, pcap_dump, latencies, bandwd, manifest, target=args.target, log_dir=args.log_dir)
+    topo = AppTopo(links, latencies, manifest=manifest, target=args.target,
+                  log_dir=args.log_dir, bws=bws)
+    switchClass = configureP4Switch(
+            sw_path=args.behavioral_exe,
+            json_path=args.json,
+            log_console=bmv2_log,
+            pcap_dump=pcap_dump)
     net = Mininet(topo = topo,
                   link = TCLink,
                   host = P4Host,
+                  switch = switchClass,
                   controller = None)
     net.start()
 
