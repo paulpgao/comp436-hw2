@@ -3,6 +3,8 @@
 #include <v1model.p4>
 
 const bit<16> TYPE_IPV4 = 0x800;
+const bit<8>  TCP_PROTOCOL = 6;
+const bit<8>  QUERY_PROTOCOL = 251;
 
 /*************************************************************************
 *********************** H E A D E R S  ***********************************
@@ -33,13 +35,34 @@ header ipv4_t {
     ip4Addr_t dstAddr;
 }
 
+header query_t {
+    bit<8> protocol;
+    bit<32> egressPort;
+    bit<32> packetSize;
+}
+
+header tcp_t {
+    bit<16> srcPort;
+    bit<16> dstPort;
+    bit<32> seqNo;
+    bit<32> ackNo;
+    bit<4>  dataOffset;
+    bit<3>  res;
+    bit<3>  ecn;
+    bit<6>  ctrl;
+    bit<16> window;
+    bit<16> checksum;
+    bit<16> urgentPtr;
+}
+
 struct metadata {
-    /* empty */
 }
 
 struct headers {
     ethernet_t   ethernet;
     ipv4_t       ipv4;
+    query_t      query;
+    tcp_t        tcp;
 }
 
 /*************************************************************************
@@ -65,6 +88,22 @@ parser MyParser(packet_in packet,
 
     state parse_ipv4 {
         packet.extract(hdr.ipv4);
+        transition select(hdr.ipv4.protocol) {
+            QUERY_PROTOCOL: parse_query;
+            default: accept;
+        }
+    }
+
+    state parse_query {
+        packet.extract(hdr.query);
+        transition select(hdr.query.protocol) {
+            TCP_PROTOCOL: parse_tcp;
+            default: accept;
+        }
+    }
+
+    state parse_tcp {
+        packet.extract(hdr.tcp);
         transition accept;
     }
 
@@ -89,28 +128,49 @@ control MyIngress(inout headers hdr,
     action drop() {
         mark_to_drop(standard_metadata);
     }
-    
-    action ipv4_forward(egressSpec_t port) {
-        standard_metadata.egress_spec = port;
-        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+    action set_ecmp_select() {
+        hash(hdr.query.egressPort,
+        HashAlgorithm.crc16,
+        (bit<16>)0,
+        { hdr.ipv4.srcAddr,
+          hdr.ipv4.dstAddr,
+          hdr.ipv4.protocol,
+          hdr.tcp.srcPort,
+          hdr.tcp.dstPort},
+        (bit<32>)2);
+        hdr.query.egressPort = hdr.query.egressPort + 2;
     }
-    
-    table ipv4_lpm {
+    action ecmp_noop(){ }
+    action set_nhop(bit<32> nhop_ipv4, bit<9> port) {
+        hdr.ipv4.dstAddr = nhop_ipv4;
+        standard_metadata.egress_spec = port;
+    }
+    table ecmp_group {
         key = {
             hdr.ipv4.dstAddr: lpm;
         }
         actions = {
-            ipv4_forward;
             drop;
-            NoAction;
+            set_ecmp_select;
+            ecmp_noop();
         }
         size = 1024;
-        default_action = drop();
     }
-    
+    table ecmp_nhop {
+        key = {
+            hdr.query.egressPort: exact;
+        }
+        actions = {
+            drop;
+            set_nhop;
+        }
+        size = 2;
+    }
     apply {
-        if (hdr.ipv4.isValid()) {
-            ipv4_lpm.apply();
+        if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
+
+            ecmp_group.apply();
+            ecmp_nhop.apply();
         }
     }
 }
@@ -157,6 +217,8 @@ control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv4);
+        packet.emit(hdr.query);
+        packet.emit(hdr.tcp);
     }
 }
 

@@ -8,6 +8,20 @@ from scapy.all import Packet, IPOption
 from scapy.all import ShortField, IntField, LongField, BitField, FieldListField, FieldLenField
 from scapy.all import IP, TCP, UDP, Raw
 from scapy.layers.inet import _IPOption_HDR
+from scapy.all import *
+
+QUERY_PROTOCOL = 251
+TCP_PROTOCOL = 6
+
+class Query(Packet):
+    name = "Query"
+    fields_desc = [
+        BitField("protocol", 0, 8),
+        IntField("egressPort", 0),
+        IntField("packetSize", 0)]
+
+bind_layers(IP, Query, proto = QUERY_PROTOCOL)
+bind_layers(Query, TCP, protocol = TCP_PROTOCOL)
 
 def get_if():
     ifs=get_if_list()
@@ -33,12 +47,17 @@ class IPOption_MRI(IPOption):
                                    [],
                                    IntField("", 0),
                                    length_from=lambda pkt:pkt.count*4) ]
+
+totalCount = 0
+
 def handle_pkt(pkt):
-    if TCP in pkt and pkt[TCP].dport == 1234:
-        print "got a packet"
-        pkt.show2()
-    #    hexdump(pkt)
-        sys.stdout.flush()
+    global totalCount
+    # pkt.show2();
+    if Query in pkt:
+        totalCount += 1
+        print "totalCount="+str(totalCount)+" egressPort=" + str(pkt["Query"].egressPort)
+#    hexdump(pkt)
+    sys.stdout.flush()
 
 
 def main():
