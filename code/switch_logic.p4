@@ -37,8 +37,10 @@ header ipv4_t {
 
 header query_t {
     bit<8> protocol;
+    bit<16> index;
     bit<32> egressPort;
     bit<32> packetSize;
+    bit<8> isPP;
 }
 
 header tcp_t {
@@ -56,6 +58,8 @@ header tcp_t {
 }
 
 struct metadata {
+    bit<32> ecmp_select;
+    bit<32> pp_select;
 }
 
 struct headers {
@@ -129,7 +133,7 @@ control MyIngress(inout headers hdr,
         mark_to_drop(standard_metadata);
     }
     action set_ecmp_select() {
-        hash(hdr.query.egressPort,
+        hash(meta.ecmp_select,
         HashAlgorithm.crc16,
         (bit<16>)0,
         { hdr.ipv4.srcAddr,
@@ -138,25 +142,31 @@ control MyIngress(inout headers hdr,
           hdr.tcp.srcPort,
           hdr.tcp.dstPort},
         (bit<32>)2);
-        hdr.query.egressPort = hdr.query.egressPort + 2;
+        hdr.query.egressPort = meta.ecmp_select + 2;
     }
-    action ecmp_noop(){ }
+    action set_pp_select() {
+        meta.pp_select = (bit<32>)(hdr.query.index % 2);
+        hdr.query.egressPort = meta.pp_select + 2;
+    }
     action set_nhop(bit<32> nhop_ipv4, bit<9> port) {
         hdr.ipv4.dstAddr = nhop_ipv4;
         standard_metadata.egress_spec = port;
+        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
-    table ecmp_group {
+    table Group {
         key = {
             hdr.ipv4.dstAddr: lpm;
+            hdr.query.isPP: exact;
         }
         actions = {
             drop;
             set_ecmp_select;
-            ecmp_noop();
+            set_pp_select;
+            NoAction;
         }
-        size = 1024;
+        default_action = NoAction();
     }
-    table ecmp_nhop {
+    table Forwarding {
         key = {
             hdr.query.egressPort: exact;
         }
@@ -164,13 +174,12 @@ control MyIngress(inout headers hdr,
             drop;
             set_nhop;
         }
-        size = 2;
     }
     apply {
         if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
-
-            ecmp_group.apply();
-            ecmp_nhop.apply();
+            hdr.query.packetSize = standard_metadata.packet_length;
+            Group.apply();
+            Forwarding.apply();
         }
     }
 }

@@ -17,8 +17,10 @@ class Query(Packet):
     name = "Query"
     fields_desc = [
         BitField("protocol", 0, 8),
+        ShortField("index", 0),
         IntField("egressPort", 0),
-        IntField("packetSize", 0)]
+        IntField("packetSize", 0),
+        BitField("isPP", 0, 8)]
 
 bind_layers(IP, Query, proto = QUERY_PROTOCOL)
 bind_layers(Query, TCP, protocol = TCP_PROTOCOL)
@@ -49,13 +51,30 @@ class IPOption_MRI(IPOption):
                                    length_from=lambda pkt:pkt.count*4) ]
 
 totalCount = 0
+port2pktCount = 0
+port2Traffic = 0
+port3pktCount = 0
+port3Traffic = 0
 
 def handle_pkt(pkt):
     global totalCount
+    global port2pktCount
+    global port2Traffic
+    global port3pktCount
+    global port3Traffic
+
     # pkt.show2();
     if Query in pkt:
         totalCount += 1
-        print "totalCount="+str(totalCount)+" egressPort=" + str(pkt["Query"].egressPort)
+        if pkt["Query"].egressPort == 2:
+            port2pktCount += 1
+            port2Traffic += pkt["Query"].packetSize
+        elif pkt["Query"].egressPort == 3:
+            port3pktCount += 1
+            port3Traffic += pkt["Query"].packetSize
+        print " totalCount=" + str(totalCount) + " index=" + str(pkt["Query"].index) + " egressPort=" + str(pkt["Query"].egressPort) + " packetSize=" + str(pkt["Query"].packetSize)
+
+        print " Port 2: " + str(port2pktCount) + " packets, " + str(port2Traffic) + " bytes. Port 3: " + str(port3pktCount) + " packets, " + str(port3Traffic) + " bytes. "
 #    hexdump(pkt)
     sys.stdout.flush()
 

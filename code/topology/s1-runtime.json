@@ -4,21 +4,25 @@
   "bmv2_json": "build/switch_logic.json",
   "table_entries": [
     {
-      "table": "MyIngress.ecmp_group",
-      "default_action": true,
-      "action_name": "MyIngress.drop",
-      "action_params": { }
-    },
-    {
-      "table": "MyIngress.ecmp_group",
+      "table": "MyIngress.Group",
       "match": {
-        "hdr.ipv4.dstAddr": ["10.0.2.2", 32]
+        "hdr.ipv4.dstAddr": ["10.0.2.2", 32],
+        "hdr.query.isPP": 0
       },
       "action_name": "MyIngress.set_ecmp_select",
       "action_params": {}
     },
     {
-      "table": "MyIngress.ecmp_nhop",
+      "table": "MyIngress.Group",
+      "match": {
+        "hdr.ipv4.dstAddr": ["10.0.2.2", 32],
+        "hdr.query.isPP": 1
+      },
+      "action_name": "MyIngress.set_pp_select",
+      "action_params": {}
+    },
+    {
+      "table": "MyIngress.Forwarding",
       "match": {
         "hdr.query.egressPort": 2
       },
@@ -29,7 +33,7 @@
       }
     },
     {
-      "table": "MyIngress.ecmp_nhop",
+      "table": "MyIngress.Forwarding",
       "match": {
         "hdr.query.egressPort": 3
       },

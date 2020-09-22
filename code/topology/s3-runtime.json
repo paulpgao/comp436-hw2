@@ -4,21 +4,7 @@
   "bmv2_json": "build/switch_logic.json",
   "table_entries": [
     {
-      "table": "MyIngress.ecmp_group",
-      "default_action": true,
-      "action_name": "MyIngress.drop",
-      "action_params": { }
-    },
-    {
-      "table": "MyIngress.ecmp_group",
-      "match": {
-        "hdr.ipv4.dstAddr": ["10.0.2.2", 32]
-      },
-      "action_name": "MyIngress.ecmp_noop",
-      "action_params": {}
-    },
-    {
-      "table": "MyIngress.ecmp_nhop",
+      "table": "MyIngress.Forwarding",
       "match": {
         "hdr.query.egressPort": 3
       },
