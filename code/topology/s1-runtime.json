@@ -6,8 +6,7 @@
     {
       "table": "MyIngress.Group",
       "match": {
-        "hdr.ipv4.dstAddr": ["10.0.2.2", 32],
-        "hdr.query.isPP": 0
+        "hdr.ipv4.dstAddr": ["0.0.0.0", 32]
       },
       "action_name": "MyIngress.set_ecmp_select",
       "action_params": {}
@@ -15,8 +14,7 @@
     {
       "table": "MyIngress.Group",
       "match": {
-        "hdr.ipv4.dstAddr": ["10.0.2.2", 32],
-        "hdr.query.isPP": 1
+        "hdr.ipv4.dstAddr": ["1.1.1.1", 32]
       },
       "action_name": "MyIngress.set_pp_select",
       "action_params": {}
@@ -24,7 +22,7 @@
     {
       "table": "MyIngress.Forwarding",
       "match": {
-        "hdr.query.egressPort": 2
+        "meta.group_select": 0
       },
       "action_name": "MyIngress.set_nhop",
       "action_params": {
@@ -35,7 +33,7 @@
     {
       "table": "MyIngress.Forwarding",
       "match": {
-        "hdr.query.egressPort": 3
+        "meta.group_select": 1
       },
       "action_name": "MyIngress.set_nhop",
       "action_params": {

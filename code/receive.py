@@ -10,6 +10,7 @@ from scapy.all import IP, TCP, UDP, Raw
 from scapy.layers.inet import _IPOption_HDR
 from scapy.all import *
 
+IPV4_PROTOCOL = 0x0800
 QUERY_PROTOCOL = 251
 TCP_PROTOCOL = 6
 
@@ -17,10 +18,10 @@ class Query(Packet):
     name = "Query"
     fields_desc = [
         BitField("protocol", 0, 8),
-        ShortField("index", 0),
-        IntField("egressPort", 0),
-        IntField("packetSize", 0),
-        BitField("isPP", 0, 8)]
+        IntField("port2count", 0),
+        IntField("port2size", 0),
+        IntField("port3count", 0),
+        IntField("port3size", 0)]
 
 bind_layers(IP, Query, proto = QUERY_PROTOCOL)
 bind_layers(Query, TCP, protocol = TCP_PROTOCOL)
@@ -51,30 +52,16 @@ class IPOption_MRI(IPOption):
                                    length_from=lambda pkt:pkt.count*4) ]
 
 totalCount = 0
-port2pktCount = 0
-port2Traffic = 0
-port3pktCount = 0
-port3Traffic = 0
 
 def handle_pkt(pkt):
     global totalCount
-    global port2pktCount
-    global port2Traffic
-    global port3pktCount
-    global port3Traffic
-
     # pkt.show2();
     if Query in pkt:
+        print " Port 2: " + str(pkt["Query"].port2count) + " packets, " + str(pkt["Query"].port2size) + " bytes. Port 3: " + str(pkt["Query"].port3count) + " packets, " + str(pkt["Query"].port3size) + " bytes. "
+        totalCount = 0
+    elif TCP in pkt:
         totalCount += 1
-        if pkt["Query"].egressPort == 2:
-            port2pktCount += 1
-            port2Traffic += pkt["Query"].packetSize
-        elif pkt["Query"].egressPort == 3:
-            port3pktCount += 1
-            port3Traffic += pkt["Query"].packetSize
-        print " totalCount=" + str(totalCount) + " index=" + str(pkt["Query"].index) + " egressPort=" + str(pkt["Query"].egressPort) + " packetSize=" + str(pkt["Query"].packetSize)
-
-        print " Port 2: " + str(port2pktCount) + " packets, " + str(port2Traffic) + " bytes. Port 3: " + str(port3pktCount) + " packets, " + str(port3Traffic) + " bytes. "
+        print " totalCount=" + str(totalCount) + " index=" + str(pkt["TCP"].seq) + " port=" + str(pkt["TCP"].sport)
 #    hexdump(pkt)
     sys.stdout.flush()
 

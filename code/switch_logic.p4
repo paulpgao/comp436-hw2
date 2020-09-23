@@ -37,10 +37,10 @@ header ipv4_t {
 
 header query_t {
     bit<8> protocol;
-    bit<16> index;
-    bit<32> egressPort;
-    bit<32> packetSize;
-    bit<8> isPP;
+    bit<32> port2count;
+    bit<32> port2size;
+    bit<32> port3count;
+    bit<32> port3size;
 }
 
 header tcp_t {
@@ -58,8 +58,7 @@ header tcp_t {
 }
 
 struct metadata {
-    bit<32> ecmp_select;
-    bit<32> pp_select;
+    bit<16> group_select;
 }
 
 struct headers {
@@ -94,6 +93,7 @@ parser MyParser(packet_in packet,
         packet.extract(hdr.ipv4);
         transition select(hdr.ipv4.protocol) {
             QUERY_PROTOCOL: parse_query;
+            TCP_PROTOCOL: parse_tcp;
             default: accept;
         }
     }
@@ -129,11 +129,22 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
+
+    register <bit<32>>(1) port2pktCount_reg;
+    register <bit<32>>(1) port2Traffic_reg;
+    register <bit<32>>(1) port3pktCount_reg;
+    register <bit<32>>(1) port3Traffic_reg;
+
+    bit<32> port2pktCount;
+    bit<32> port2Traffic;
+    bit<32> port3pktCount;
+    bit<32> port3Traffic;
+
     action drop() {
         mark_to_drop(standard_metadata);
     }
     action set_ecmp_select() {
-        hash(meta.ecmp_select,
+        hash(meta.group_select,
         HashAlgorithm.crc16,
         (bit<16>)0,
         { hdr.ipv4.srcAddr,
@@ -142,11 +153,11 @@ control MyIngress(inout headers hdr,
           hdr.tcp.srcPort,
           hdr.tcp.dstPort},
         (bit<32>)2);
-        hdr.query.egressPort = meta.ecmp_select + 2;
+        hdr.tcp.srcPort = meta.group_select + 2;
     }
     action set_pp_select() {
-        meta.pp_select = (bit<32>)(hdr.query.index % 2);
-        hdr.query.egressPort = meta.pp_select + 2;
+        meta.group_select = (bit<16>)(hdr.tcp.seqNo % 2);
+        hdr.tcp.srcPort = meta.group_select + 2;
     }
     action set_nhop(bit<32> nhop_ipv4, bit<9> port) {
         hdr.ipv4.dstAddr = nhop_ipv4;
@@ -156,7 +167,6 @@ control MyIngress(inout headers hdr,
     table Group {
         key = {
             hdr.ipv4.dstAddr: lpm;
-            hdr.query.isPP: exact;
         }
         actions = {
             drop;
@@ -168,7 +178,16 @@ control MyIngress(inout headers hdr,
     }
     table Forwarding {
         key = {
-            hdr.query.egressPort: exact;
+            meta.group_select: exact;
+        }
+        actions = {
+            drop;
+            set_nhop;
+        }
+    }
+    table DB_forwarding {
+        key = {
+            hdr.ipv4.dstAddr: lpm;
         }
         actions = {
             drop;
@@ -177,9 +196,38 @@ control MyIngress(inout headers hdr,
     }
     apply {
         if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
-            hdr.query.packetSize = standard_metadata.packet_length;
             Group.apply();
             Forwarding.apply();
+            DB_forwarding.apply();  
+            if (hdr.ipv4.protocol == QUERY_PROTOCOL) {
+                port2pktCount_reg.read(hdr.query.port2count, 0);
+                port2Traffic_reg.read(hdr.query.port2size, 0);
+                port3pktCount_reg.read(hdr.query.port3count, 0);
+                port3Traffic_reg.read(hdr.query.port3size, 0);
+
+                port2pktCount_reg.write(0, 0);
+                port2Traffic_reg.write(0, 0);
+                port3pktCount_reg.write(0, 0);
+                port3Traffic_reg.write(0, 0);
+            } else {
+                if (hdr.tcp.srcPort == 2) {
+                    port2pktCount_reg.read(port2pktCount, 0);
+                    port2pktCount = port2pktCount + 1;
+                    port2pktCount_reg.write(0, port2pktCount);
+
+                    port2Traffic_reg.read(port2Traffic, 0);
+                    port2Traffic = port2Traffic + standard_metadata.packet_length;
+                    port2Traffic_reg.write(0, port2Traffic);
+                } else {
+                    port3pktCount_reg.read(port3pktCount, 0);
+                    port3pktCount = port3pktCount + 1;
+                    port3pktCount_reg.write(0, port3pktCount);
+
+                    port3Traffic_reg.read(port3Traffic, 0);
+                    port3Traffic = port3Traffic + standard_metadata.packet_length;
+                    port3Traffic_reg.write(0, port3Traffic);
+                }
+            }
         }
     }
 }

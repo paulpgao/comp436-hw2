@@ -10,6 +10,7 @@ from scapy.all import Packet
 from scapy.all import Ether, IP, UDP, TCP
 from scapy.all import *
 
+IPV4_PROTOCOL = 0x0800
 QUERY_PROTOCOL = 251
 TCP_PROTOCOL = 6
 
@@ -17,10 +18,10 @@ class Query(Packet):
     name = "Query"
     fields_desc = [
         BitField("protocol", 0, 8),
-        ShortField("index", 0),
-        IntField("egressPort", 0),
-        IntField("packetSize", 0),
-        BitField("isPP", 0, 8)]
+        IntField("port2count", 0),
+        IntField("port2size", 0),
+        IntField("port3count", 0),
+        IntField("port3size", 0)]
 
 bind_layers(IP, Query, proto = QUERY_PROTOCOL)
 bind_layers(Query, TCP, protocol = TCP_PROTOCOL)
@@ -37,7 +38,7 @@ def get_if():
         exit(1)
     return iface
 
-def send_pkt(idx, flag):
+def send_pkt(idx, flag, type):
     # if len(sys.argv)<3:
     #     print 'pass 2 arguments: <destination> "<message>"'
     #     exit(1)
@@ -45,19 +46,25 @@ def send_pkt(idx, flag):
     addr = socket.gethostbyname(sys.argv[1])
     iface = get_if()
 
-    print str(idx)
+    print idx
     # print "sending on interface %s to %s" % (iface, str(addr))
-    pkt =  Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff')
-    pkt = pkt /IP(dst=addr, proto=QUERY_PROTOCOL) / Query(protocol=TCP_PROTOCOL, index=idx, isPP=flag) / TCP(dport=1234, sport=random.randint(49152,65535)) / "text"
-    # pkt.show2()
+    if type == 1:
+        pkt = Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff')
+        pkt = pkt / IP(dst=flag, proto=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535), seq=idx) / "text"
+        # pkt.show2()
+    elif type == 2:
+        pkt = Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff')
+        pkt = pkt / IP(dst=addr, proto=QUERY_PROTOCOL) / Query(protocol=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535)) / "text"
     sendp(pkt, iface=iface, verbose=False)
 
 def main():
-    flag = 0
+    flag = '0.0.0.0'
     if len(sys.argv) > 2 and sys.argv[2] == "-pp":
-        flag = 1
-    for i in range(200):
-        send_pkt(i, flag)
+        flag = '1.1.1.1'
+    for i in range(20):
+        send_pkt(i, flag, 1)
+    time.sleep(2)
+    send_pkt(i, flag, 2)
     
 if __name__ == '__main__':
     main()

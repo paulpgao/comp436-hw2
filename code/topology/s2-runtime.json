@@ -4,9 +4,9 @@
   "bmv2_json": "build/switch_logic.json",
   "table_entries": [
     {
-      "table": "MyIngress.Forwarding",
+      "table": "MyIngress.DB_forwarding",
       "match": {
-        "hdr.query.egressPort": 2
+        "hdr.ipv4.dstAddr": ["10.0.2.2", 32]
       },
       "action_name": "MyIngress.set_nhop",
       "action_params": {
