@@ -59,6 +59,7 @@ header tcp_t {
 
 struct metadata {
     bit<16> group_select;
+    bit<16> flow_number;
 }
 
 struct headers {
@@ -140,6 +141,13 @@ control MyIngress(inout headers hdr,
     bit<32> port3pktCount;
     bit<32> port3Traffic;
 
+    register <bit<32>>(1) flow0Index_reg;
+    register <bit<32>>(1) flow1Index_reg;
+
+    bit<32> flow0Index;
+    bit<32> flow1Index;
+
+
     action drop() {
         mark_to_drop(standard_metadata);
     }
@@ -153,9 +161,20 @@ control MyIngress(inout headers hdr,
           hdr.tcp.srcPort,
           hdr.tcp.dstPort},
         (bit<32>)2);
+        meta.flow_number = meta.group_select;
         hdr.tcp.srcPort = meta.group_select + 2;
     }
     action set_pp_select() {
+        hash(meta.group_select,
+        HashAlgorithm.crc16,
+        (bit<16>)0,
+        { hdr.ipv4.srcAddr,
+          hdr.ipv4.dstAddr,
+          hdr.ipv4.protocol,
+          hdr.tcp.srcPort,
+          hdr.tcp.dstPort},
+        (bit<32>)2);
+        meta.flow_number = meta.group_select;
         meta.group_select = (bit<16>)(hdr.tcp.seqNo % 2);
         hdr.tcp.srcPort = meta.group_select + 2;
     }
@@ -164,6 +183,19 @@ control MyIngress(inout headers hdr,
         standard_metadata.egress_spec = port;
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
+    action record_flow0_data() {
+        flow0Index_reg.read(flow0Index, 0);
+        flow0Index = flow0Index + 1;
+        flow0Index_reg.write(0, flow0Index);
+        hdr.tcp.seqNo = flow0Index;
+    }
+    action record_flow1_data() {
+        flow1Index_reg.read(flow1Index, 0);
+        flow1Index = flow1Index + 1;
+        flow1Index_reg.write(0, flow1Index);
+        hdr.tcp.seqNo = flow1Index;
+    }
+    
     table Group {
         key = {
             hdr.ipv4.dstAddr: lpm;
@@ -175,6 +207,16 @@ control MyIngress(inout headers hdr,
             NoAction;
         }
         default_action = NoAction();
+    }
+    table Index {
+        key = {
+            meta.flow_number: exact;
+        }
+        actions = {
+            drop;
+            record_flow0_data;
+            record_flow1_data;
+        }
     }
     table Forwarding {
         key = {
@@ -194,11 +236,11 @@ control MyIngress(inout headers hdr,
             set_nhop;
         }
     }
+
     apply {
         if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
-            Group.apply();
-            Forwarding.apply();
-            DB_forwarding.apply();  
+            Group.apply(); 
+            Index.apply(); 
             if (hdr.ipv4.protocol == QUERY_PROTOCOL) {
                 port2pktCount_reg.read(hdr.query.port2count, 0);
                 port2Traffic_reg.read(hdr.query.port2size, 0);
@@ -209,6 +251,9 @@ control MyIngress(inout headers hdr,
                 port2Traffic_reg.write(0, 0);
                 port3pktCount_reg.write(0, 0);
                 port3Traffic_reg.write(0, 0);
+
+                flow0Index_reg.write(0, 0);
+                flow1Index_reg.write(0, 0);
             } else {
                 if (hdr.tcp.srcPort == 2) {
                     port2pktCount_reg.read(port2pktCount, 0);
@@ -217,7 +262,7 @@ control MyIngress(inout headers hdr,
 
                     port2Traffic_reg.read(port2Traffic, 0);
                     port2Traffic = port2Traffic + standard_metadata.packet_length;
-                    port2Traffic_reg.write(0, port2Traffic);
+                    port2Traffic_reg.write(0, port2Traffic);                   
                 } else {
                     port3pktCount_reg.read(port3pktCount, 0);
                     port3pktCount = port3pktCount + 1;
@@ -228,6 +273,8 @@ control MyIngress(inout headers hdr,
                     port3Traffic_reg.write(0, port3Traffic);
                 }
             }
+            Forwarding.apply();
+            DB_forwarding.apply();
         }
     }
 }

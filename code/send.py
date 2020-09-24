@@ -46,24 +46,24 @@ def send_pkt(idx, flag, type):
     addr = socket.gethostbyname(sys.argv[1])
     iface = get_if()
 
-    print idx
     # print "sending on interface %s to %s" % (iface, str(addr))
     if type == 1:
+        print idx
         pkt = Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff')
-        pkt = pkt / IP(dst=flag, proto=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535), seq=idx) / "text"
+        pkt = pkt / IP(dst=flag, proto=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535), seq=idx) / ("a"*random.randint(1,1000))
         # pkt.show2()
     elif type == 2:
         pkt = Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff')
-        pkt = pkt / IP(dst=addr, proto=QUERY_PROTOCOL) / Query(protocol=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535)) / "text"
+        pkt = pkt / IP(dst=addr, proto=QUERY_PROTOCOL) / Query(protocol=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535)) / "query"
     sendp(pkt, iface=iface, verbose=False)
 
 def main():
     flag = '0.0.0.0'
     if len(sys.argv) > 2 and sys.argv[2] == "-pp":
         flag = '1.1.1.1'
-    for i in range(20):
+    for i in range(200):
         send_pkt(i, flag, 1)
-    time.sleep(2)
+    time.sleep(1)
     send_pkt(i, flag, 2)
     
 if __name__ == '__main__':

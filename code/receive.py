@@ -51,17 +51,47 @@ class IPOption_MRI(IPOption):
                                    IntField("", 0),
                                    length_from=lambda pkt:pkt.count*4) ]
 
-totalCount = 0
+total_count = 0
+port2_packet_order = []
+port3_packet_order = []
+port2_inv_count = 0
+port3_inv_count = 0
 
 def handle_pkt(pkt):
-    global totalCount
+    global total_count
+    global port2_packet_order
+    global port3_packet_order
+    global port2_inv_count
+    global port3_inv_count
     # pkt.show2();
+
     if Query in pkt:
+        for i in range(len(port2_packet_order)):
+            for j in range(i+1, len(port2_packet_order)):
+                if (port2_packet_order[i] > port2_packet_order[j]):
+                    port2_inv_count += 1
+
+        for i in range(len(port3_packet_order)):
+            for j in range(i+1, len(port3_packet_order)):
+                if (port3_packet_order[i] > port3_packet_order[j]):
+                    port3_inv_count += 1
+
+        print " Total: " + str(pkt["Query"].port2count + pkt["Query"].port3count) + " packets, " +str(pkt["Query"].port2size + pkt["Query"].port3size) + " bytes. " 
         print " Port 2: " + str(pkt["Query"].port2count) + " packets, " + str(pkt["Query"].port2size) + " bytes. Port 3: " + str(pkt["Query"].port3count) + " packets, " + str(pkt["Query"].port3size) + " bytes. "
-        totalCount = 0
+        print " Port 2 flow packet inversions: " + str(port2_inv_count) + ", Port 3 flow packet inversions: " + str(port3_inv_count)
+        total_count = 0
+        port2_packet_order = []
+        port3_packet_order = []
+        port2_inv_count = 0
+        port3_inv_count = 0
+
     elif TCP in pkt:
-        totalCount += 1
-        print " totalCount=" + str(totalCount) + " index=" + str(pkt["TCP"].seq) + " port=" + str(pkt["TCP"].sport)
+        total_count += 1
+        print " total_count=" + str(total_count) + " port=" + str(pkt["TCP"].sport) + " index=" + str(pkt["TCP"].seq)
+        if pkt["TCP"].sport == 2:
+            port2_packet_order.append(pkt["TCP"].seq)
+        elif pkt["TCP"].sport == 3:
+            port3_packet_order.append(pkt["TCP"].seq)
 #    hexdump(pkt)
     sys.stdout.flush()
 
