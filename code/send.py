@@ -61,6 +61,9 @@ def main():
     flag = '0.0.0.0'
     if len(sys.argv) > 2 and sys.argv[2] == "-pp":
         flag = '1.1.1.1'
+    elif len(sys.argv) <= 1:
+        print 'pass 1 arguments: <destination> [OPTIONAL]-pp'
+        exit(1) 
     for i in range(200):
         send_pkt(i, flag, 1)
     time.sleep(1)
