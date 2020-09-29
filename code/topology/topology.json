@@ -13,6 +13,6 @@
         "s3": { "runtime_json" : "topology/s3-runtime.json" },
         "s4": { "runtime_json" : "topology/s4-runtime.json" }
       },
-      "links": [["h1", "s1-p1"], ["s1-p2", "s2-p1"], ["s1-p3", "s3-p1"], 
+      "links": [["h1", "s1-p1"], ["s1-p2", "s2-p1", "1ms"], ["s1-p3", "s3-p1", "50ms"], 
                 ["s2-p2", "s4-p2"], ["s3-p2", "s4-p3"], ["s4-p1", "h2"]]
 }

@@ -36,11 +36,11 @@ header ipv4_t {
 }
 
 header query_t {
-    bit<8> protocol;
-    bit<32> port2count;
-    bit<32> port2size;
-    bit<32> port3count;
-    bit<32> port3size;
+    bit<8> protocol;     // Protocal field for pointing to the next header.
+    bit<32> port2count;  // Number of packets outbouding through port 2 of Switch 1.
+    bit<32> port2size;   // Amount of traffic outbouding through port 2 of Switch 1.
+    bit<32> port3count;  // Number of packets outbouding through port 3 of Switch 1.
+    bit<32> port3size;   // Amount of traffic outbouding through port 3 of Switch 1.
 }
 
 header tcp_t {
@@ -58,8 +58,8 @@ header tcp_t {
 }
 
 struct metadata {
-    bit<16> group_select;
-    bit<16> flow_number;
+    bit<16> group_select; // Bucket number for determine a packet's egress port from Switch 1.
+    bit<16> flow_number;  // A packet's flow number.
 }
 
 struct headers {
@@ -131,26 +131,23 @@ control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
 
-    register <bit<32>>(1) port2pktCount_reg;
-    register <bit<32>>(1) port2Traffic_reg;
-    register <bit<32>>(1) port3pktCount_reg;
-    register <bit<32>>(1) port3Traffic_reg;
+    // Registers to keep track of the switch statistcs.
+    register <bit<32>>(1) port2pktCount_reg;  // Number of packets outbouding through port 2 of Switch 1.
+    register <bit<32>>(1) port2Traffic_reg;   // Amount of traffic outbouding through port 2 of Switch 1.
+    register <bit<32>>(1) port3pktCount_reg;  // Number of packets outbouding through port 3 of Switch 1.
+    register <bit<32>>(1) port3Traffic_reg;   // Amount of traffic outbouding through port 3 of Switch 1.
 
+    // Variables to hold the result from reading the above registers.
     bit<32> port2pktCount;
     bit<32> port2Traffic;
     bit<32> port3pktCount;
     bit<32> port3Traffic;
 
-    register <bit<32>>(1) flow0Index_reg;
-    register <bit<32>>(1) flow1Index_reg;
-
-    bit<32> flow0Index;
-    bit<32> flow1Index;
-
-
     action drop() {
         mark_to_drop(standard_metadata);
     }
+
+    // ECMP load balancing
     action set_ecmp_select() {
         hash(meta.group_select,
         HashAlgorithm.crc16,
@@ -162,8 +159,11 @@ control MyIngress(inout headers hdr,
           hdr.tcp.dstPort},
         (bit<32>)2);
         meta.flow_number = meta.group_select;
+        hdr.tcp.ackNo = (bit<32>)meta.flow_number;
         hdr.tcp.srcPort = meta.group_select + 2;
     }
+
+    // Per-packet load balancing
     action set_pp_select() {
         hash(meta.group_select,
         HashAlgorithm.crc16,
@@ -175,27 +175,22 @@ control MyIngress(inout headers hdr,
           hdr.tcp.dstPort},
         (bit<32>)2);
         meta.flow_number = meta.group_select;
+        hdr.tcp.ackNo = (bit<32>)meta.flow_number;
         meta.group_select = (bit<16>)(hdr.tcp.seqNo % 2);
         hdr.tcp.srcPort = meta.group_select + 2;
     }
+
+    // Setting the egress port and IP destination.
     action set_nhop(bit<32> nhop_ipv4, bit<9> port) {
         hdr.ipv4.dstAddr = nhop_ipv4;
         standard_metadata.egress_spec = port;
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
-    action record_flow0_data() {
-        flow0Index_reg.read(flow0Index, 0);
-        flow0Index = flow0Index + 1;
-        flow0Index_reg.write(0, flow0Index);
-        hdr.tcp.seqNo = flow0Index;
-    }
-    action record_flow1_data() {
-        flow1Index_reg.read(flow1Index, 0);
-        flow1Index = flow1Index + 1;
-        flow1Index_reg.write(0, flow1Index);
-        hdr.tcp.seqNo = flow1Index;
-    }
     
+    // Table matching the destination address. Only used for Switch 1.
+    // "0.0.0.0": first hop for ECMP load balancing
+    // "1.1.1.1": first hop for per-packet load balancing
+    // Others: ignore
     table Group {
         key = {
             hdr.ipv4.dstAddr: lpm;
@@ -208,16 +203,10 @@ control MyIngress(inout headers hdr,
         }
         default_action = NoAction();
     }
-    table Index {
-        key = {
-            meta.flow_number: exact;
-        }
-        actions = {
-            drop;
-            record_flow0_data;
-            record_flow1_data;
-        }
-    }
+
+    // Forwarding table matching the bucket number. Only used for Switch 1.
+    // "0": port 2
+    // "1": port 3
     table Forwarding {
         key = {
             meta.group_select: exact;
@@ -227,6 +216,9 @@ control MyIngress(inout headers hdr,
             set_nhop;
         }
     }
+
+    // Forwarding table matching the IP address. Used for Switch 2, 3, 4.
+    // "10.0.2.2": Each switch's correct egress port.
     table DB_forwarding {
         key = {
             hdr.ipv4.dstAddr: lpm;
@@ -240,7 +232,7 @@ control MyIngress(inout headers hdr,
     apply {
         if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
             Group.apply(); 
-            Index.apply(); 
+            // Collecting data for the "query" packet.
             if (hdr.ipv4.protocol == QUERY_PROTOCOL) {
                 port2pktCount_reg.read(hdr.query.port2count, 0);
                 port2Traffic_reg.read(hdr.query.port2size, 0);
@@ -251,9 +243,7 @@ control MyIngress(inout headers hdr,
                 port2Traffic_reg.write(0, 0);
                 port3pktCount_reg.write(0, 0);
                 port3Traffic_reg.write(0, 0);
-
-                flow0Index_reg.write(0, 0);
-                flow1Index_reg.write(0, 0);
+            // Regular packets.
             } else {
                 if (hdr.tcp.srcPort == 2) {
                     port2pktCount_reg.read(port2pktCount, 0);

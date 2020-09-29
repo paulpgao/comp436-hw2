@@ -1,0 +1,36 @@
+Name: Pinglan Gao
+NetID: pg22
+Student ID: S01271705
+
+------------------------------ File Description --------------------------------
+
+- HW2-report.pdf		    	Homework report
+- ecmp.png
+- pp.png
+- sp1.png
+- sp2.png
+- HW2-2020.pdf              	Assignment document
+- code
+	- topology
+		- s1-runtime.json		
+		- s2-runtime.json
+		- s3-runtime.json
+		- s4-runtime.json 
+		- topology.jpg			Network topology graph
+		- topology.json			Network topology json file
+	- Makefile
+	- switch_logic.p4			Switch logic p4 file
+	- receive.py				Sender
+	- send.py					Receiver
+	- utils        				Folder for util files
+- README
+
+------------------------------- Instructions -----------------------------------
+
+1. To run the program, do 'make' under comp436-hw2/code. 
+2. Once in Mininet, use xterm to open windows for h1 and h2. 
+3. In h2, do './receive.py' to run receiver program. 
+4. In h1, do './send.py 10.0.2.2' to send 100 flows with 20 packets for each 
+   flow. This command will use ECMP load balancing.
+5. To repeat the same task using per-packet load balancing, do 
+   './send.py 10.0.2.2 -pp'.

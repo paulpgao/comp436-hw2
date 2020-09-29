@@ -14,6 +14,7 @@ IPV4_PROTOCOL = 0x0800
 QUERY_PROTOCOL = 251
 TCP_PROTOCOL = 6
 
+# Custom Query packet to collect statistics.
 class Query(Packet):
     name = "Query"
     fields_desc = [
@@ -46,16 +47,18 @@ def send_pkt(idx, flag, type):
     addr = socket.gethostbyname(sys.argv[1])
     iface = get_if()
 
-    # print "sending on interface %s to %s" % (iface, str(addr))
+    # Sending regular packets.
     if type == 1:
         print idx
         pkt = Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff')
         pkt = pkt / IP(dst=flag, proto=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535), seq=idx) / ("a"*random.randint(1,1000))
         # pkt.show2()
+    # Sending "query" packet.
     elif type == 2:
         pkt = Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff')
         pkt = pkt / IP(dst=addr, proto=QUERY_PROTOCOL) / Query(protocol=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535)) / "query"
     sendp(pkt, iface=iface, verbose=False)
+    time.sleep(0.001)
 
 def main():
     flag = '0.0.0.0'
@@ -64,10 +67,12 @@ def main():
     elif len(sys.argv) <= 1:
         print 'pass 1 arguments: <destination> [OPTIONAL]-pp'
         exit(1) 
-    for i in range(200):
-        send_pkt(i, flag, 1)
-    time.sleep(1)
-    send_pkt(i, flag, 2)
+    for j in range(100):
+        for i in range(20):
+            send_pkt(i, flag, 1)
+        time.sleep(1)
+        send_pkt(i, flag, 2)
+        time.sleep(1)
     
 if __name__ == '__main__':
     main()

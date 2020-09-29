@@ -20,22 +20,6 @@
       "action_params": {}
     },
     {
-      "table": "MyIngress.Index",
-      "match": {
-        "meta.flow_number": 0
-      },
-      "action_name": "MyIngress.record_flow0_data",
-      "action_params": {}
-    },
-    {
-      "table": "MyIngress.Index",
-      "match": {
-        "meta.flow_number": 1
-      },
-      "action_name": "MyIngress.record_flow1_data",
-      "action_params": {}
-    },
-    {
       "table": "MyIngress.Forwarding",
       "match": {
         "meta.group_select": 0
