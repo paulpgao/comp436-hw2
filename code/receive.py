@@ -61,8 +61,6 @@ flow0_packet_order = [] # Flow 0 packet order.
 flow1_packet_order = [] # Flow 1 packet order.
 flow0_inv_count = 0     # Flow 0 packet inversion count.
 flow1_inv_count = 0     # Flow 1 packet inversion count.
-flow0_inv_count_list = [] # List of Flow 0 packet inversion count.
-flow1_inv_count_list = [] # List of packet inversion count.
 
 def handle_pkt(pkt):
     global total_count
@@ -88,9 +86,6 @@ def handle_pkt(pkt):
             for j in range(i+1, len(flow1_packet_order)):
                 if (flow1_packet_order[i] > flow1_packet_order[j]):
                     flow1_inv_count += 1
-
-        flow0_inv_count_list.append(float(flow0_inv_count))
-        flow1_inv_count_list.append(float(flow1_inv_count))
         
         port2_packet_count += pkt["Query"].port2count
         port3_packet_count += pkt["Query"].port3count
@@ -100,7 +95,6 @@ def handle_pkt(pkt):
         print " Total: " + str(port2_packet_count + port3_packet_count) + " packets, " +str(port2_traffic_count + port3_traffic_count) + " bytes. " 
         print " Port 2: " + str(port2_packet_count) + " packets, " + str(port2_traffic_count) + " bytes. Port 3: " + str(port3_packet_count) + " packets, " + str(port3_traffic_count) + " bytes. "
         print " Flow 0 packet inversions: " + str(flow0_inv_count) + ", Flow 1 flow packet inversions: " + str(flow1_inv_count)
-        print " Average packet inversions across runs: Flow 0: " + str(sum(flow0_inv_count_list) / len(flow0_inv_count_list)) + " Flow 1: " + str(sum(flow1_inv_count_list) / len(flow1_inv_count_list))
 
         flow0_packet_order = []
         flow1_packet_order = []
@@ -128,8 +122,6 @@ def main():
     flow1_packet_order = []
     flow0_inv_count = 0
     flow1_inv_count = 0
-    flow0_inv_count_list = []
-    flow1_inv_count_list = []
 
     ifaces = filter(lambda i: 'eth' in i, os.listdir('/sys/class/net/'))
     iface = ifaces[0]

@@ -39,7 +39,7 @@ def get_if():
         exit(1)
     return iface
 
-def send_pkt(idx, flag, type):
+def send_pkt(idx, flag, type, flow):
     # if len(sys.argv)<3:
     #     print 'pass 2 arguments: <destination> "<message>"'
     #     exit(1)
@@ -51,7 +51,7 @@ def send_pkt(idx, flag, type):
     if type == 1:
         print idx
         pkt = Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff')
-        pkt = pkt / IP(dst=flag, proto=TCP_PROTOCOL) / TCP(dport=1234, sport=random.randint(49152,65535), seq=idx) / ("a"*random.randint(1,1000))
+        pkt = pkt / IP(dst=flag, proto=TCP_PROTOCOL) / TCP(dport=1234, sport=flow, seq=idx) / ("a"*random.randint(1,1000))
         # pkt.show2()
     # Sending "query" packet.
     elif type == 2:
@@ -66,13 +66,17 @@ def main():
         flag = '1.1.1.1'
     elif len(sys.argv) <= 1:
         print 'pass 1 arguments: <destination> [OPTIONAL]-pp'
-        exit(1) 
+        exit(1)
+    idx = 0 
     for j in range(100):
-        for i in range(20):
-            send_pkt(i, flag, 1)
-        time.sleep(1)
-        send_pkt(i, flag, 2)
-        time.sleep(1)
+        flow = random.randint(49152,65535);
+        for i in range(random.randint(10,20)):
+            send_pkt(idx, flag, 1, flow)
+            idx += 1
+        print str(i + 1) + " packets send.\n"
+        time.sleep(0.5)
+    send_pkt(i, flag, 2, 1234)
+    time.sleep(1)
     
 if __name__ == '__main__':
     main()
